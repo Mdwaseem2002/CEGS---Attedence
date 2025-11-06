@@ -1,4 +1,6 @@
-// src/app/api/employees/[id]/route.ts
+// ==========================================
+// FILE: src/app/api/employees/[id]/route.ts
+// ==========================================
 import { NextRequest, NextResponse } from 'next/server';
 import connectDB from '@/lib/mongodb';
 import Employee from '@/models/Employee';
@@ -19,30 +21,25 @@ export async function PUT(
     }
 
     await connectDB();
-    const body = await request.json();
+    const employeeData = await request.json();
 
-    // Build update object with only fields that should be updated
-    const updateData: any = {
-      name: body.name,
-      email: body.email,
-      department: body.department,
-      position: body.position,
-      salary: body.salary,
-      joiningDate: body.joiningDate
-    };
-
-    // Only update password if a new one is provided
-    if (body.password && body.password.trim() !== '') {
-      updateData.password = await bcrypt.hash(body.password, 10);
+    // ⭐ FIX: Remove password field if it's empty or undefined
+    // Only hash and update password if a new password is actually provided
+    if (employeeData.password && employeeData.password.trim() !== '') {
+      employeeData.password = await bcrypt.hash(employeeData.password, 10);
+    } else {
+      // Remove password from update data to avoid validation error
+      delete employeeData.password;
     }
 
-    // Find and update employee
     const employee = await Employee.findOneAndUpdate(
-      { $or: [{ id: params.id }, { employeeId: params.id }] },
-      { $set: updateData },
+      { id: params.id },
+      employeeData,
       { 
         new: true, 
-        runValidators: false // Disable validation to allow password to be skipped
+        runValidators: true,
+        // ⭐ IMPORTANT: This prevents validation on fields not being updated
+        context: 'query'
       }
     ).select('-password');
 
@@ -54,10 +51,10 @@ export async function PUT(
     }
 
     return NextResponse.json({ success: true, data: employee });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Update employee error:', error);
     return NextResponse.json(
-      { success: false, message: error.message || 'Server error' },
+      { success: false, message: 'Server error' },
       { status: 500 }
     );
   }
@@ -77,9 +74,7 @@ export async function DELETE(
     }
 
     await connectDB();
-    const employee = await Employee.findOneAndDelete({ 
-      $or: [{ id: params.id }, { employeeId: params.id }] 
-    });
+    const employee = await Employee.findOneAndDelete({ id: params.id });
 
     if (!employee) {
       return NextResponse.json(

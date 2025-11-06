@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(body.password, 10);
 
-    // Prepare employee data with both id and employeeId
+    // ⭐ CRITICAL FIX: Map joinDate from frontend to joiningDate for MongoDB
     const employeeData = {
       id: generatedId,
       employeeId: generatedId,
@@ -73,10 +73,11 @@ export async function POST(request: NextRequest) {
       email: body.email,
       username: body.username,
       password: hashedPassword,
+      phone: body.phone || '',
       department: body.department,
       position: body.position,
       salary: body.salary,
-      joiningDate: body.joiningDate
+      joiningDate: body.joinDate  // ⭐ FIXED: Use body.joinDate instead of body.joiningDate
     };
 
     console.log('Creating employee with:', employeeData);

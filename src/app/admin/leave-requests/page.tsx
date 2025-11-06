@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import AdminLayout from '@/components/AdminLayout';
+import { apiClient } from '@/lib/api-client';
 
 interface LeaveRequest {
   _id: string;
@@ -37,30 +38,14 @@ export default function LeaveRequestsPage() {
     try {
       setError('');
       
-      const token = localStorage.getItem('token');
-      if (!token) {
-        setError('No authentication token found. Please login again.');
-        setLoading(false);
-        return;
-      }
-
       console.log('Fetching leave requests...');
       
-      const response = await fetch('/api/leave-requests', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        },
-        cache: 'no-store' // Prevent caching
+      const response = await apiClient('/api/leave-requests', {
+        cache: 'no-store'
       });
 
       console.log('Response status:', response.status);
       
-      if (response.status === 401) {
-        setError('Session expired. Please login again.');
-        setLoading(false);
-        return;
-      }
-
       const data = await response.json();
       console.log('Response data:', data);
       
@@ -81,34 +66,22 @@ export default function LeaveRequestsPage() {
 
   const handleApproval = async (id: string, status: 'approved' | 'rejected', isPaid: boolean = false) => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        alert('No authentication token found. Please login again.');
-        return;
-      }
-
       console.log(`Updating leave request ${id} to ${status} (paid: ${isPaid})`);
       
-      const response = await fetch(`/api/leave-requests/${id}`, {
+      const response = await apiClient(`/api/leave-requests/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({ status, isPaid }),
       });
 
       const data = await response.json();
       
-      if (response.status === 401) {
-        alert('Session expired. Please login again.');
-        return;
-      }
-      
       if (data.success) {
         console.log('✅ Leave request updated successfully');
         alert(`Leave request ${status} successfully!`);
-        await loadLeaveRequests(); // Reload the list
+        await loadLeaveRequests();
       } else {
         console.error('Failed to update:', data.message);
         alert(data.message || 'Failed to update leave request');

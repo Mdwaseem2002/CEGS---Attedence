@@ -9,11 +9,11 @@ export interface Employee {
   email: string;
   username: string;
   password: string;
-  phone: string; // Required field
+  phone?: string; // Made optional since it has a default
   department: string;
   position: string;
   salary: number;
-  joinDate: string; // Note: Changed from joiningDate to match usage
+  joiningDate: string; // FIXED: Changed from joinDate to joiningDate
   role?: 'admin' | 'employee';
 }
 
@@ -25,7 +25,7 @@ export interface AttendanceRecord {
   date: string;
   loginTime: string;
   logoutTime?: string;
-  totalHours?: number; // Added missing field
+  totalHours?: number;
   status: 'present' | 'absent' | 'late' | 'half-day';
   location: string;
   isLate: boolean;
@@ -43,7 +43,7 @@ export interface LeaveRequest {
   type: 'sick' | 'casual' | 'vacation' | 'other';
   leaveType?: string; // Alternative field name for type
   appliedDate: string;
-  isPaid?: boolean; // Added missing field
+  isPaid?: boolean;
 }
 
 export interface PayrollRecord {

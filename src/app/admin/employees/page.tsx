@@ -160,7 +160,7 @@ export default function EmployeesPage() {
       department: employee.department,
       position: employee.position,
       salary: employee.salary.toString(),
-      joinDate: employee.joinDate  // FIXED: Changed from joiningDate to joinDate
+      joinDate: employee.joiningDate  // FIXED: Changed from joiningDate to joinDate
     });
     setShowForm(true);
   };
@@ -206,7 +206,7 @@ export default function EmployeesPage() {
       ['Name', 'Email', 'Username', 'Phone', 'Department', 'Position', 'Salary', 'Join Date'],
       ...employees.map(emp => [
         emp.name, emp.email, emp.username, emp.phone || 'N/A', emp.department, 
-        emp.position, emp.salary.toString(), emp.joinDate
+        emp.position, emp.salary.toString(), emp.joiningDate
       ])
     ].map(row => row.join(',')).join('\n');
 

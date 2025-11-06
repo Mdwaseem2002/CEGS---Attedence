@@ -7,8 +7,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-producti
 interface DecodedToken {
   id: string;
   employeeId?: string;
-  name: string;
-  email: string;
+  username?: string;
+  name?: string;
+  email?: string;
   role: string;
   iat?: number;
   exp?: number;
@@ -18,6 +19,7 @@ interface AuthResult {
   success: boolean;
   user?: DecodedToken;
   message?: string;
+  expired?: boolean; // Track if token is expired
 }
 
 export async function verifyAuth(request: NextRequest): Promise<AuthResult> {
@@ -27,33 +29,60 @@ export async function verifyAuth(request: NextRequest): Promise<AuthResult> {
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return {
         success: false,
-        message: 'No token provided'
+        message: 'No token provided',
+        expired: false
       };
     }
 
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+    const token = authHeader.substring(7);
     
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as DecodedToken;
       
-      console.log('Decoded token:', decoded);
-      
       return {
         success: true,
-        user: decoded
+        user: decoded,
+        expired: false
       };
-    } catch (jwtError) {
-      console.error('JWT verification error:', jwtError);
+    } catch (jwtError: any) {
+      // Check if token is expired
+      if (jwtError.name === 'TokenExpiredError') {
+        console.warn('Token expired at:', jwtError.expiredAt);
+        return {
+          success: false,
+          message: 'Token expired',
+          expired: true
+        };
+      }
+      
+      // Other JWT errors (invalid signature, malformed, etc.)
+      console.error('JWT verification error:', jwtError.message);
       return {
         success: false,
-        message: 'Invalid token'
+        message: 'Invalid token',
+        expired: false
       };
     }
   } catch (error) {
     console.error('Auth verification error:', error);
     return {
       success: false,
-      message: 'Authentication failed'
+      message: 'Authentication failed',
+      expired: false
     };
+  }
+}
+
+// Helper to generate tokens with configurable expiry
+export function generateToken(payload: Omit<DecodedToken, 'iat' | 'exp'>, expiresIn: string = '24h'): string {
+  return jwt.sign(payload, JWT_SECRET, { expiresIn });
+}
+
+// Helper to decode token without verification (to check expiry)
+export function decodeToken(token: string): DecodedToken | null {
+  try {
+    return jwt.decode(token) as DecodedToken;
+  } catch {
+    return null;
   }
 }

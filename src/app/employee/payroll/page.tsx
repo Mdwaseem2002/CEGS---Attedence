@@ -14,6 +14,7 @@ interface Employee {
   department: string;
   position: string;
   salary: number;
+  joiningDate: string; // FIXED: Added required field
 }
 
 interface LeaveRequest {
@@ -174,12 +175,25 @@ export default function EmployeePayrollPage() {
       }
     });
 
-    const totalDaysInMonth = 30;
-    const workingDays = totalDaysInMonth - paidLeaves - unpaidLeaves;
-    
-    const dailySalary = employee.salary / totalDaysInMonth;
-    const deductions = unpaidLeaves * dailySalary;
-    const finalSalary = employee.salary - deductions;
+    // Calculate working days excluding Sundays
+const totalDaysInMonth = new Date(selectedYear, parseInt(selectedMonth), 0).getDate();
+
+let workingDaysCount = 0;
+for (let day = 1; day <= totalDaysInMonth; day++) {
+  const currentDate = new Date(selectedYear, parseInt(selectedMonth) - 1, day);
+  if (currentDate.getDay() !== 0) { // 0 = Sunday
+    workingDaysCount++;
+  }
+}
+
+// Adjust for paid and unpaid leaves
+const workingDays = workingDaysCount - paidLeaves - unpaidLeaves;
+
+// Salary calculations
+const dailySalary = employee.salary / workingDaysCount; // Based on actual working days (no Sundays)
+const deductions = unpaidLeaves * dailySalary;
+const finalSalary = employee.salary - deductions;
+
 
     const payroll: PayrollRecord = {
       id: `${employee.id}-${selectedYear}-${selectedMonth}`,
@@ -498,21 +512,25 @@ This is a computer generated payslip and does not require signature.
             )}
 
             {/* Information Note */}
-            <div className="bg-gradient-to-br from-blue-900/20 via-blue-800/20 to-blue-900/20 backdrop-blur-xl rounded-2xl shadow-xl border border-blue-400/30 p-6">
-              <div className="flex items-start gap-3">
-                <span className="text-blue-400 text-2xl">ℹ️</span>
-                <div>
-                  <h4 className="text-blue-400 font-bold mb-2">Payroll Information</h4>
-                  <ul className="space-y-2 text-sm text-blue-200">
-                    <li>• Paid leaves do not affect your salary</li>
-                    <li>• Only unpaid leaves result in deductions from your base salary</li>
-                    <li>• Daily salary is calculated as: Base Salary ÷ 30 days</li>
-                    <li>• Deduction = Unpaid Leave Days × Daily Salary</li>
-                    <li>• Download your payslip for detailed breakdown</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
+<div className="bg-gradient-to-br from-blue-900/20 via-blue-800/20 to-blue-900/20 backdrop-blur-xl rounded-2xl shadow-xl border border-blue-400/30 p-6">
+  <div className="flex items-start gap-3">
+    <span className="text-blue-400 text-2xl">ℹ️</span>
+    <div>
+      <h4 className="text-blue-400 font-bold mb-2">Payroll Information</h4>
+      <ul className="space-y-2 text-sm text-blue-200">
+        <li>• Sunday is considered a holiday — only 6 working days per week.</li>
+        <li>• Monthly salary is calculated based on working days excluding Sundays (around 26 days/month).</li>
+        <li>• Paid leaves do not affect your salary.</li>
+        <li>• Only unpaid leaves result in deductions from your base salary.</li>
+        <li>• Daily salary = Base Salary ÷ Total Working Days (excluding Sundays).</li>
+        <li>• Deduction = Unpaid Leave Days × Daily Salary.</li>
+        <li>• Download your payslip for a detailed salary breakdown.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+
           </div>
         </div>
       </EmployeeLayout>

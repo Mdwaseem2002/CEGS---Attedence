@@ -4,60 +4,76 @@ import mongoose from 'mongoose';
 const employeeSchema = new mongoose.Schema({
   id: { 
     type: String, 
-    required: true,  // Make it required
-    unique: true     // Ensure uniqueness
+    required: [true, 'Employee ID is required'],
+    unique: true,
+    trim: true
   },
   employeeId: { 
     type: String, 
-    required: true, 
-    unique: true 
+    required: [true, 'Employee ID is required'], 
+    unique: true,
+    trim: true
   },
   name: { 
     type: String, 
-    required: true 
+    required: [true, 'Name is required'],
+    trim: true
   },
   email: { 
     type: String, 
-    required: true, 
-    unique: true 
+    required: [true, 'Email is required'], 
+    unique: true,
+    trim: true,
+    lowercase: true
   },
   username: { 
     type: String, 
-    required: true, 
-    unique: true 
+    required: [true, 'Username is required'], 
+    unique: true,
+    trim: true
   },
   password: { 
     type: String, 
-    required: true 
+    required: [true, 'Password is required']
   },
   department: { 
     type: String, 
-    required: true 
+    required: [true, 'Department is required'],
+    trim: true
   },
   position: { 
     type: String, 
-    required: true 
+    required: [true, 'Position is required'],
+    trim: true
   },
   salary: { 
     type: Number, 
-    required: true 
+    required: [true, 'Salary is required'],
+    min: [0, 'Salary must be a positive number']
   },
   joiningDate: { 
     type: String, 
-    required: true 
+    required: [true, 'Joining date is required']
   },
-  joinDate: String, // Keep for backward compatibility
-  phone: String
+  phone: {
+    type: String,
+    default: '',
+    trim: true
+  }
 }, {
-  timestamps: true
+  timestamps: true,
+  collection: 'employees'
 });
 
-// Ensure indexes are created
+// Create indexes for better query performance and uniqueness
 employeeSchema.index({ id: 1 }, { unique: true });
 employeeSchema.index({ employeeId: 1 }, { unique: true });
 employeeSchema.index({ username: 1 }, { unique: true });
 employeeSchema.index({ email: 1 }, { unique: true });
+employeeSchema.index({ department: 1 });
+employeeSchema.index({ position: 1 });
 
+// Prevent model recompilation in development
 const Employee = mongoose.models.Employee || mongoose.model('Employee', employeeSchema);
 
 export default Employee;
