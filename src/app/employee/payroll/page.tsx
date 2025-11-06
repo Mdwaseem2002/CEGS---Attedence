@@ -8,6 +8,7 @@ import { auth } from '@/lib/auth';
 interface Employee {
   _id: string;
   id: string;
+  employeeId?: string;
   name: string;
   email: string;
   department: string;
