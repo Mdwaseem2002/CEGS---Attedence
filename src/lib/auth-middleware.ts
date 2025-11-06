@@ -75,7 +75,7 @@ export async function verifyAuth(request: NextRequest): Promise<AuthResult> {
 
 // Helper to generate tokens with configurable expiry
 export function generateToken(payload: Omit<DecodedToken, 'iat' | 'exp'>, expiresIn: string = '24h'): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn });
+  return jwt.sign(payload as Record<string, any>, JWT_SECRET, { expiresIn } as any);
 }
 
 // Helper to decode token without verification (to check expiry)
