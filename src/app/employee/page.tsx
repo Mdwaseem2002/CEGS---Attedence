@@ -550,6 +550,16 @@ export default function EmployeeDashboard() {
                         Request Leave
                       </span>
                     </button>
+                    <button
+                      onClick={() => router.push('/employee/payroll')}
+                      className="group w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white font-bold py-3 px-4 rounded-xl shadow-2xl hover:shadow-purple-500/25 transition-all duration-300 transform hover:scale-105 hover:-translate-y-1 relative overflow-hidden"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                      <span className="relative z-10 flex items-center justify-center gap-2">
+                        <span>💰</span>
+                        My Payroll
+                      </span>
+                    </button>
                   </div>
                 </div>
               </div>
