@@ -51,19 +51,78 @@ export default function EmployeeDashboard() {
     return () => clearInterval(timer);
   }, [router]);
 
+  // Auto checkout at 19:00 (7 PM)
+  useEffect(() => {
+    const checkAutoCheckout = async () => {
+      if (!todayAttendance || !isLoggedIn || !employee) return;
+
+      const now = new Date();
+      const hours = now.getHours();
+      const minutes = now.getMinutes();
+
+      // Check if it's 19:00 (7 PM) or later and user hasn't checked out
+      if (hours >= 19 && !todayAttendance.logoutTime) {
+        console.log('🕐 Auto checkout triggered at', formatTime(now));
+        await performAutoCheckout();
+      }
+    };
+
+    // Check every minute
+    const autoCheckoutInterval = setInterval(checkAutoCheckout, 60000);
+    
+    // Also check immediately
+    checkAutoCheckout();
+
+    return () => clearInterval(autoCheckoutInterval);
+  }, [todayAttendance, isLoggedIn, employee]);
+
+  const performAutoCheckout = async () => {
+    if (!todayAttendance || !employee) return;
+
+    try {
+      const checkoutTime = '19:00';
+      const totalHours = calculateWorkingHours(todayAttendance.loginTime, checkoutTime);
+
+      console.log('=== AUTO CHECK OUT ===');
+      console.log('Attendance ID:', todayAttendance.id || todayAttendance._id);
+      console.log('Auto Logout Time:', checkoutTime);
+      console.log('Total Hours:', totalHours);
+
+      const updatedRecord: AttendanceRecord = {
+        ...todayAttendance,
+        logoutTime: checkoutTime,
+        totalHours
+      };
+
+      const recordId = todayAttendance._id || todayAttendance.id;
+      
+      if (!recordId) {
+        console.error('No record ID found:', todayAttendance);
+        return;
+      }
+
+      const success = await db.updateAttendanceRecord(recordId, updatedRecord);
+
+      if (success) {
+        console.log('✅ Auto check-out successful');
+        
+        // Reload attendance data
+        const user = auth.getCurrentUser();
+        if (user) {
+          await loadTodayAttendance(user.id);
+          await loadWeeklyAttendance(user.id);
+        }
+      }
+    } catch (error) {
+      console.error('Auto check-out error:', error);
+    }
+  };
+
   const loadEmployeeData = async (userId: string) => {
     try {
       console.log('Loading employee data for user ID:', userId);
       const employees = await db.getEmployees();
       
-      console.log('All employees:', employees.map(e => ({
-        id: e.id,
-        employeeId: e.employeeId,
-        _id: e._id,
-        name: e.name
-      })));
-      
-      // Try to find employee by matching any ID field
       const emp = employees.find(e => 
         e.id === userId || 
         e.employeeId === userId || 
@@ -74,8 +133,7 @@ export default function EmployeeDashboard() {
         console.log('✅ Employee found:', {
           name: emp.name,
           id: emp.id,
-          employeeId: emp.employeeId,
-          _id: emp._id
+          employeeId: emp.employeeId
         });
         setEmployee(emp);
       } else {
@@ -90,7 +148,6 @@ export default function EmployeeDashboard() {
     try {
       console.log('Loading today attendance for user ID:', userId);
       
-      // Get all employees to find matching records
       const employees = await db.getEmployees();
       const emp = employees.find(e => 
         e.id === userId || 
@@ -103,13 +160,9 @@ export default function EmployeeDashboard() {
         return;
       }
 
-      // Try all possible ID variations
       const possibleIds = [emp.id, emp.employeeId, emp._id].filter(Boolean);
-      console.log('Searching attendance with IDs:', possibleIds);
-
       let allAttendance: AttendanceRecord[] = [];
       
-      // Fetch attendance for all possible IDs
       for (const id of possibleIds) {
         try {
           const records = await db.getAttendanceRecords(id as string);
@@ -119,26 +172,17 @@ export default function EmployeeDashboard() {
         }
       }
 
-      console.log('Total attendance records found:', allAttendance.length);
-      
-      // Get today's date in YYYY-MM-DD format
       const today = formatDate(new Date());
-      console.log('Looking for date:', today);
       
-      // Find today's record with flexible date matching
       const todayRecord = allAttendance.find(record => {
-        // Handle different date formats
         let recordDate = record.date;
         
-        // If date is ISO format, extract date part
         if (recordDate.includes('T')) {
           recordDate = recordDate.split('T')[0];
         }
         
-        // Remove any time part if present
         recordDate = recordDate.split(' ')[0];
         
-        console.log('Comparing:', recordDate, '===', today);
         return recordDate === today;
       });
       
@@ -149,8 +193,6 @@ export default function EmployeeDashboard() {
           loginTime: todayRecord.loginTime,
           logoutTime: todayRecord.logoutTime
         });
-      } else {
-        console.log('❌ No record found for today');
       }
       
       setTodayAttendance(todayRecord || null);
@@ -162,7 +204,6 @@ export default function EmployeeDashboard() {
 
   const loadRecentLeaves = async (userId: string) => {
     try {
-      // Get employee to find correct ID
       const employees = await db.getEmployees();
       const emp = employees.find(e => 
         e.id === userId || 
@@ -184,7 +225,6 @@ export default function EmployeeDashboard() {
         }
       }
 
-      // Remove duplicates and sort
       const uniqueLeaves = Array.from(
         new Map(allLeaves.map(leave => [(leave.id || leave._id), leave])).values()
       );
@@ -201,7 +241,6 @@ export default function EmployeeDashboard() {
 
   const loadWeeklyAttendance = async (userId: string) => {
     try {
-      // Get employee to find correct ID
       const employees = await db.getEmployees();
       const emp = employees.find(e => 
         e.id === userId || 
@@ -223,7 +262,6 @@ export default function EmployeeDashboard() {
         }
       }
 
-      // Remove duplicates
       const uniqueAttendance = Array.from(
         new Map(allAttendance.map(record => [(record.id || record._id), record])).values()
       );
@@ -251,13 +289,11 @@ export default function EmployeeDashboard() {
     }
 
     try {
-      // First, refresh today's attendance to ensure we have latest data
       const user = auth.getCurrentUser();
       if (user) {
         await loadTodayAttendance(user.id);
       }
 
-      // Check again after refresh
       if (todayAttendance) {
         alert('❌ You have already checked in today!');
         return;
@@ -267,15 +303,6 @@ export default function EmployeeDashboard() {
       const loginTime = formatTime(now);
       const isLate = isLateLogin(loginTime);
 
-      console.log('=== CHECK IN ===');
-      console.log('Employee ID:', employee.id);
-      console.log('Employee employeeId:', employee.employeeId);
-      console.log('Employee _id:', employee._id);
-      console.log('Employee Name:', employee.name);
-      console.log('Login Time:', loginTime);
-      console.log('Is Late:', isLate);
-
-      // Use the primary ID (employeeId if available, otherwise id)
       const primaryId = employee.employeeId || employee.id;
 
       const attendanceRecord: AttendanceRecord = {
@@ -289,22 +316,17 @@ export default function EmployeeDashboard() {
         status: 'present'
       };
 
-      console.log('Sending attendance record:', attendanceRecord);
-
       const success = await db.addAttendanceRecord(attendanceRecord);
 
       if (success) {
-        console.log('✅ Check-in successful');
         alert(`✅ Checked in successfully at ${loginTime}!${isLate ? ' (Late)' : ''}`);
         
-        // Reload data
         if (user) {
           await loadTodayAttendance(user.id);
           await loadWeeklyAttendance(user.id);
         }
       } else {
-        console.error('❌ Check-in failed');
-        alert('❌ Failed to check in. Please try again or contact support.');
+        alert('❌ Failed to check in. Please try again.');
       }
     } catch (error) {
       console.error('Check-in error:', error);
@@ -323,22 +345,15 @@ export default function EmployeeDashboard() {
       const logoutTime = formatTime(now);
       const totalHours = calculateWorkingHours(todayAttendance.loginTime, logoutTime);
 
-      console.log('=== CHECK OUT ===');
-      console.log('Attendance ID:', todayAttendance.id || todayAttendance._id);
-      console.log('Logout Time:', logoutTime);
-      console.log('Total Hours:', totalHours);
-
       const updatedRecord: AttendanceRecord = {
         ...todayAttendance,
         logoutTime,
         totalHours
       };
 
-      // Use _id for MongoDB, fallback to id
       const recordId = todayAttendance._id || todayAttendance.id;
       
       if (!recordId) {
-        console.error('No record ID found:', todayAttendance);
         alert('Error: Record ID not found');
         return;
       }
@@ -346,17 +361,14 @@ export default function EmployeeDashboard() {
       const success = await db.updateAttendanceRecord(recordId, updatedRecord);
 
       if (success) {
-        console.log('✅ Check-out successful');
         alert(`✅ Checked out successfully at ${logoutTime}!`);
         
-        // Reload attendance data
         const user = auth.getCurrentUser();
         if (user) {
           await loadTodayAttendance(user.id);
           await loadWeeklyAttendance(user.id);
         }
       } else {
-        console.error('❌ Check-out failed');
         alert('Failed to check out. Please try again.');
       }
     } catch (error) {
@@ -388,14 +400,14 @@ export default function EmployeeDashboard() {
   if (!employee) {
     return (
       <ProtectedRoute>
-        <div className="min-h-screen bg-black flex items-center justify-center">
-          <div className="text-center bg-red-900/20 backdrop-blur-lg p-8 rounded-2xl border border-red-500/30">
-            <div className="text-6xl mb-4">⚠️</div>
-            <h2 className="text-2xl font-bold text-red-300 mb-4">Failed to Load Employee Information</h2>
-            <p className="text-red-200 mb-6">Please try logging in again.</p>
+        <div className="min-h-screen bg-black flex items-center justify-center p-4">
+          <div className="text-center bg-red-900/20 backdrop-blur-lg p-6 md:p-8 rounded-2xl border border-red-500/30 max-w-md">
+            <div className="text-4xl md:text-6xl mb-4">⚠️</div>
+            <h2 className="text-xl md:text-2xl font-bold text-red-300 mb-4">Failed to Load Employee Information</h2>
+            <p className="text-sm md:text-base text-red-200 mb-6">Please try logging in again.</p>
             <button
               onClick={() => router.push('/login?type=employee')}
-              className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg font-semibold"
+              className="bg-red-500 hover:bg-red-600 text-white px-6 py-3 rounded-lg font-semibold text-sm md:text-base"
             >
               Go to Login
             </button>
@@ -412,40 +424,37 @@ export default function EmployeeDashboard() {
           {/* Animated Background Elements */}
           <div className="absolute inset-0">
             <div className="absolute top-20 left-10 w-72 h-72 bg-gradient-to-r from-yellow-400/10 to-amber-500/10 rounded-full blur-3xl animate-pulse" />
-            <div className="absolute bottom-20 right-10 w-96 h-96 bg-gradient-to-l from-yellow-300/8 to-yellow-600/8 rounded-full blur-3xl animate-pulse delay-1000" />
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-tr from-amber-400/5 to-yellow-500/5 rounded-full blur-3xl animate-pulse delay-500" />
+            <div className="absolute bottom-20 right-10 w-96 h-96 bg-gradient-to-l from-yellow-300/8 to-yellow-600/8 rounded-full blur-3xl animate-pulse" />
           </div>
 
           {/* Golden Grid Pattern Overlay */}
           <div className="absolute inset-0 opacity-5" style={{
-            backgroundImage: `radial-gradient(circle at 1px 1px, rgb(255, 215, 0) 1px, transparent 0)`,
+            backgroundImage: 'radial-gradient(circle at 1px 1px, rgb(255, 215, 0) 1px, transparent 0)',
             backgroundSize: '40px 40px'
           }} />
 
-          <div className="relative z-10 p-6 space-y-6">
+          <div className="relative z-10 p-4 md:p-6 space-y-4 md:space-y-6">
             {/* Welcome Section */}
-            <div className="bg-gradient-to-br from-gray-900/95 via-black/98 to-gray-900/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-yellow-400/20 overflow-hidden relative p-8">
-              {/* Premium Border Glow */}
-              <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-yellow-400/20 via-amber-500/20 to-yellow-400/20 blur-xl opacity-60" />
+            <div className="bg-gradient-to-br from-gray-900/95 via-black/98 to-gray-900/95 backdrop-blur-xl rounded-2xl md:rounded-3xl shadow-2xl border border-yellow-400/20 overflow-hidden relative p-4 md:p-8">
+              <div className="absolute inset-0 rounded-2xl md:rounded-3xl bg-gradient-to-r from-yellow-400/20 via-amber-500/20 to-yellow-400/20 blur-xl opacity-60" />
               
-              <div className="relative z-10 flex justify-between items-center">
+              <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                  <h2 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-amber-500 to-yellow-600 mb-3">
+                  <h2 className="text-2xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-amber-500 to-yellow-600 mb-2 md:mb-3">
                     Good {currentTime.getHours() < 12 ? 'Morning' : currentTime.getHours() < 17 ? 'Afternoon' : 'Evening'}, {employee.name}!
                   </h2>
-                  <p className="text-yellow-300/80 text-lg font-semibold">
+                  <p className="text-yellow-300/80 text-sm md:text-lg font-semibold">
                     {employee.position} • {employee.department}
                   </p>
                 </div>
-                <div className="text-right">
-                  <div className="text-3xl font-mono text-yellow-400 font-bold">
+                <div className="text-left md:text-right w-full md:w-auto">
+                  <div className="text-2xl md:text-3xl font-mono text-yellow-400 font-bold">
                     {currentTime.toLocaleTimeString()}
                   </div>
-                  <div className="text-yellow-300/70 font-medium">
+                  <div className="text-yellow-300/70 font-medium text-xs md:text-base">
                     {currentTime.toLocaleDateString('en-US', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
+                      weekday: 'short',
+                      month: 'short',
                       day: 'numeric'
                     })}
                   </div>
@@ -454,37 +463,37 @@ export default function EmployeeDashboard() {
             </div>
 
             {/* Quick Actions Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
               {/* Check In/Out Card */}
-              <div className="bg-gradient-to-br from-gray-900/95 via-black/98 to-gray-900/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-yellow-400/20 overflow-hidden relative">
-                <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-yellow-400/20 via-amber-500/20 to-yellow-400/20 blur-xl opacity-60" />
+              <div className="bg-gradient-to-br from-gray-900/95 via-black/98 to-gray-900/95 backdrop-blur-xl rounded-2xl md:rounded-3xl shadow-2xl border border-yellow-400/20 overflow-hidden relative">
+                <div className="absolute inset-0 rounded-2xl md:rounded-3xl bg-gradient-to-r from-yellow-400/20 via-amber-500/20 to-yellow-400/20 blur-xl opacity-60" />
                 
-                <div className="relative z-10 p-6">
-                  <h3 className="text-xl font-bold text-yellow-400 mb-6 flex items-center gap-2">
-                    <span className="text-2xl">🕒</span>
+                <div className="relative z-10 p-4 md:p-6">
+                  <h3 className="text-lg md:text-xl font-bold text-yellow-400 mb-4 md:mb-6 flex items-center gap-2">
+                    <span className="text-xl md:text-2xl">🕒</span>
                     Today&apos;s Attendance
                   </h3>
                   
                   {todayAttendance ? (
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-center p-3 bg-gray-800/30 rounded-xl border border-yellow-400/10">
-                        <span className="text-gray-300">Check In:</span>
-                        <span className={`font-bold ${todayAttendance.isLate ? 'text-red-400' : 'text-green-400'}`}>
+                    <div className="space-y-3 md:space-y-4">
+                      <div className="flex justify-between items-center p-2 md:p-3 bg-gray-800/30 rounded-lg md:rounded-xl border border-yellow-400/10">
+                        <span className="text-sm md:text-base text-gray-300">Check In:</span>
+                        <span className={`font-bold text-sm md:text-base ${todayAttendance.isLate ? 'text-red-400' : 'text-green-400'}`}>
                           {todayAttendance.loginTime} {todayAttendance.isLate && '(Late)'}
                         </span>
                       </div>
                       
                       {todayAttendance.logoutTime && (
                         <>
-                          <div className="flex justify-between items-center p-3 bg-gray-800/30 rounded-xl border border-yellow-400/10">
-                            <span className="text-gray-300">Check Out:</span>
-                            <span className="font-bold text-blue-400">
+                          <div className="flex justify-between items-center p-2 md:p-3 bg-gray-800/30 rounded-lg md:rounded-xl border border-yellow-400/10">
+                            <span className="text-sm md:text-base text-gray-300">Check Out:</span>
+                            <span className="font-bold text-sm md:text-base text-blue-400">
                               {todayAttendance.logoutTime}
                             </span>
                           </div>
-                          <div className="flex justify-between items-center p-3 bg-gray-800/30 rounded-xl border border-yellow-400/10">
-                            <span className="text-gray-300">Total Hours:</span>
-                            <span className="font-bold text-purple-400">
+                          <div className="flex justify-between items-center p-2 md:p-3 bg-gray-800/30 rounded-lg md:rounded-xl border border-yellow-400/10">
+                            <span className="text-sm md:text-base text-gray-300">Total Hours:</span>
+                            <span className="font-bold text-sm md:text-base text-purple-400">
                               {todayAttendance.totalHours}h
                             </span>
                           </div>
@@ -494,26 +503,24 @@ export default function EmployeeDashboard() {
                       {isLoggedIn ? (
                         <button
                           onClick={handleCheckOut}
-                          className="group w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold py-3 px-4 rounded-xl shadow-2xl hover:shadow-red-500/25 transition-all duration-300 transform hover:scale-105 hover:-translate-y-1 relative overflow-hidden"
+                          className="group w-full bg-gradient-to-r from-red-600 to-red-700 hover:from-red-500 hover:to-red-600 text-white font-bold py-2 md:py-3 px-4 rounded-lg md:rounded-xl shadow-2xl transition-all duration-300 transform hover:scale-105 text-sm md:text-base"
                         >
-                          <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                          <span className="relative z-10">🚪 Check Out</span>
+                          🚪 Check Out
                         </button>
                       ) : todayAttendance.logoutTime ? (
-                        <div className="w-full bg-gradient-to-r from-gray-600/50 to-gray-700/50 text-gray-300 font-bold py-3 px-4 rounded-xl text-center border border-gray-600/30">
+                        <div className="w-full bg-gradient-to-r from-gray-600/50 to-gray-700/50 text-gray-300 font-bold py-2 md:py-3 px-4 rounded-lg md:rounded-xl text-center border border-gray-600/30 text-sm md:text-base">
                           ✅ Day Completed
                         </div>
                       ) : null}
                     </div>
                   ) : (
                     <div className="text-center">
-                      <p className="text-gray-400 mb-6 text-lg">You haven&apos;t checked in today</p>
+                      <p className="text-gray-400 mb-4 md:mb-6 text-base md:text-lg">You haven&apos;t checked in today</p>
                       <button
                         onClick={handleCheckIn}
-                        className="group w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white font-bold py-3 px-4 rounded-xl shadow-2xl hover:shadow-green-500/25 transition-all duration-300 transform hover:scale-105 hover:-translate-y-1 relative overflow-hidden"
+                        className="group w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white font-bold py-2 md:py-3 px-4 rounded-lg md:rounded-xl shadow-2xl transition-all duration-300 transform hover:scale-105 text-sm md:text-base"
                       >
-                        <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                        <span className="relative z-10">🚀 Check In</span>
+                        🚀 Check In
                       </button>
                     </div>
                   )}
@@ -521,41 +528,38 @@ export default function EmployeeDashboard() {
               </div>
 
               {/* Quick Actions */}
-              <div className="bg-gradient-to-br from-gray-900/95 via-black/98 to-gray-900/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-yellow-400/20 overflow-hidden relative">
-                <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-yellow-400/20 via-amber-500/20 to-yellow-400/20 blur-xl opacity-60" />
+              <div className="bg-gradient-to-br from-gray-900/95 via-black/98 to-gray-900/95 backdrop-blur-xl rounded-2xl md:rounded-3xl shadow-2xl border border-yellow-400/20 overflow-hidden relative">
+                <div className="absolute inset-0 rounded-2xl md:rounded-3xl bg-gradient-to-r from-yellow-400/20 via-amber-500/20 to-yellow-400/20 blur-xl opacity-60" />
                 
-                <div className="relative z-10 p-6">
-                  <h3 className="text-xl font-bold text-yellow-400 mb-6 flex items-center gap-2">
-                    <span className="text-2xl">⚡</span>
+                <div className="relative z-10 p-4 md:p-6">
+                  <h3 className="text-lg md:text-xl font-bold text-yellow-400 mb-4 md:mb-6 flex items-center gap-2">
+                    <span className="text-xl md:text-2xl">⚡</span>
                     Quick Actions
                   </h3>
-                  <div className="space-y-4">
+                  <div className="space-y-3 md:space-y-4">
                     <button
                       onClick={() => router.push('/employee/attendance')}
-                      className="group w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-bold py-3 px-4 rounded-xl shadow-2xl hover:shadow-blue-500/25 transition-all duration-300 transform hover:scale-105 hover:-translate-y-1 relative overflow-hidden"
+                      className="group w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-bold py-2 md:py-3 px-4 rounded-lg md:rounded-xl shadow-2xl transition-all duration-300 transform hover:scale-105 text-sm md:text-base"
                     >
-                      <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                      <span className="relative z-10 flex items-center justify-center gap-2">
+                      <span className="flex items-center justify-center gap-2">
                         <span>🕒</span>
                         View Attendance
                       </span>
                     </button>
                     <button
                       onClick={() => router.push('/employee/leave')}
-                      className="group w-full bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-500 hover:to-yellow-600 text-white font-bold py-3 px-4 rounded-xl shadow-2xl hover:shadow-yellow-500/25 transition-all duration-300 transform hover:scale-105 hover:-translate-y-1 relative overflow-hidden"
+                      className="group w-full bg-gradient-to-r from-yellow-600 to-yellow-700 hover:from-yellow-500 hover:to-yellow-600 text-white font-bold py-2 md:py-3 px-4 rounded-lg md:rounded-xl shadow-2xl transition-all duration-300 transform hover:scale-105 text-sm md:text-base"
                     >
-                      <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                      <span className="relative z-10 flex items-center justify-center gap-2">
+                      <span className="flex items-center justify-center gap-2">
                         <span>📝</span>
                         Request Leave
                       </span>
                     </button>
                     <button
                       onClick={() => router.push('/employee/payroll')}
-                      className="group w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white font-bold py-3 px-4 rounded-xl shadow-2xl hover:shadow-purple-500/25 transition-all duration-300 transform hover:scale-105 hover:-translate-y-1 relative overflow-hidden"
+                      className="group w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white font-bold py-2 md:py-3 px-4 rounded-lg md:rounded-xl shadow-2xl transition-all duration-300 transform hover:scale-105 text-sm md:text-base"
                     >
-                      <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                      <span className="relative z-10 flex items-center justify-center gap-2">
+                      <span className="flex items-center justify-center gap-2">
                         <span>💰</span>
                         My Payroll
                       </span>
@@ -565,30 +569,30 @@ export default function EmployeeDashboard() {
               </div>
 
               {/* Stats Card */}
-              <div className="bg-gradient-to-br from-gray-900/95 via-black/98 to-gray-900/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-yellow-400/20 overflow-hidden relative">
-                <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-yellow-400/20 via-amber-500/20 to-yellow-400/20 blur-xl opacity-60" />
+              <div className="bg-gradient-to-br from-gray-900/95 via-black/98 to-gray-900/95 backdrop-blur-xl rounded-2xl md:rounded-3xl shadow-2xl border border-yellow-400/20 overflow-hidden relative">
+                <div className="absolute inset-0 rounded-2xl md:rounded-3xl bg-gradient-to-r from-yellow-400/20 via-amber-500/20 to-yellow-400/20 blur-xl opacity-60" />
                 
-                <div className="relative z-10 p-6">
-                  <h3 className="text-xl font-bold text-yellow-400 mb-6 flex items-center gap-2">
-                    <span className="text-2xl">📊</span>
+                <div className="relative z-10 p-4 md:p-6">
+                  <h3 className="text-lg md:text-xl font-bold text-yellow-400 mb-4 md:mb-6 flex items-center gap-2">
+                    <span className="text-xl md:text-2xl">📊</span>
                     This Week&apos;s Stats
                   </h3>
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center p-3 bg-gray-800/30 rounded-xl border border-yellow-400/10">
-                      <span className="text-gray-300">Days Present:</span>
-                      <span className="font-bold text-green-400 text-lg">
+                  <div className="space-y-3 md:space-y-4">
+                    <div className="flex justify-between items-center p-2 md:p-3 bg-gray-800/30 rounded-lg md:rounded-xl border border-yellow-400/10">
+                      <span className="text-sm md:text-base text-gray-300">Days Present:</span>
+                      <span className="font-bold text-green-400 text-base md:text-lg">
                         {weeklyAttendance.length}
                       </span>
                     </div>
-                    <div className="flex justify-between items-center p-3 bg-gray-800/30 rounded-xl border border-yellow-400/10">
-                      <span className="text-gray-300">Late Arrivals:</span>
-                      <span className="font-bold text-red-400 text-lg">
+                    <div className="flex justify-between items-center p-2 md:p-3 bg-gray-800/30 rounded-lg md:rounded-xl border border-yellow-400/10">
+                      <span className="text-sm md:text-base text-gray-300">Late Arrivals:</span>
+                      <span className="font-bold text-red-400 text-base md:text-lg">
                         {weeklyAttendance.filter(record => record.isLate).length}
                       </span>
                     </div>
-                    <div className="flex justify-between items-center p-3 bg-gray-800/30 rounded-xl border border-yellow-400/10">
-                      <span className="text-gray-300">Total Hours:</span>
-                      <span className="font-bold text-blue-400 text-lg">
+                    <div className="flex justify-between items-center p-2 md:p-3 bg-gray-800/30 rounded-lg md:rounded-xl border border-yellow-400/10">
+                      <span className="text-sm md:text-base text-gray-300">Total Hours:</span>
+                      <span className="font-bold text-blue-400 text-base md:text-lg">
                         {weeklyAttendance.reduce((sum, record) => sum + (record.totalHours || 0), 0).toFixed(1)}h
                       </span>
                     </div>
@@ -598,38 +602,38 @@ export default function EmployeeDashboard() {
             </div>
 
             {/* Recent Activity */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
               {/* Recent Attendance */}
-              <div className="bg-gradient-to-br from-gray-900/95 via-black/98 to-gray-900/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-yellow-400/20 overflow-hidden relative">
-                <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-yellow-400/20 via-amber-500/20 to-yellow-400/20 blur-xl opacity-60" />
+              <div className="bg-gradient-to-br from-gray-900/95 via-black/98 to-gray-900/95 backdrop-blur-xl rounded-2xl md:rounded-3xl shadow-2xl border border-yellow-400/20 overflow-hidden relative">
+                <div className="absolute inset-0 rounded-2xl md:rounded-3xl bg-gradient-to-r from-yellow-400/20 via-amber-500/20 to-yellow-400/20 blur-xl opacity-60" />
                 
                 <div className="relative z-10">
-                  <div className="px-6 py-5 bg-gradient-to-r from-yellow-400/10 to-amber-500/10 border-b border-yellow-400/20">
-                    <h3 className="text-xl font-bold text-yellow-400 flex items-center gap-3">
-                      <span className="text-2xl">📅</span>
+                  <div className="px-4 md:px-6 py-4 md:py-5 bg-gradient-to-r from-yellow-400/10 to-amber-500/10 border-b border-yellow-400/20">
+                    <h3 className="text-lg md:text-xl font-bold text-yellow-400 flex items-center gap-2 md:gap-3">
+                      <span className="text-xl md:text-2xl">📅</span>
                       Recent Attendance
                     </h3>
                   </div>
-                  <div className="p-6 space-y-3">
+                  <div className="p-4 md:p-6 space-y-2 md:space-y-3">
                     {weeklyAttendance.slice(0, 5).map((record) => (
-                      <div key={record.id || record._id} className="flex justify-between items-center p-4 bg-gray-800/30 rounded-xl border border-yellow-400/10 hover:bg-yellow-400/5 transition-colors duration-200">
+                      <div key={record.id || record._id} className="flex justify-between items-center p-3 md:p-4 bg-gray-800/30 rounded-lg md:rounded-xl border border-yellow-400/10">
                         <div>
-                          <div className="font-bold text-white text-lg">
+                          <div className="font-bold text-white text-sm md:text-lg">
                             {new Date(record.date).toLocaleDateString('en-US', {
                               weekday: 'short',
                               month: 'short',
                               day: 'numeric'
                             })}
                           </div>
-                          <div className="text-sm text-gray-400">
+                          <div className="text-xs md:text-sm text-gray-400">
                             {record.loginTime} - {record.logoutTime || 'Active'}
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className={`text-sm font-bold mb-1 ${record.isLate ? 'text-red-400' : 'text-green-400'}`}>
+                          <div className={`text-xs md:text-sm font-bold mb-1 ${record.isLate ? 'text-red-400' : 'text-green-400'}`}>
                             {record.isLate ? '🔴 Late' : '🟢 On Time'}
                           </div>
-                          <div className="text-sm text-gray-400 font-semibold">
+                          <div className="text-xs md:text-sm text-gray-400 font-semibold">
                             {record.totalHours ? `${record.totalHours}h` : '0h'}
                           </div>
                         </div>
@@ -640,27 +644,27 @@ export default function EmployeeDashboard() {
               </div>
 
               {/* Recent Leave Requests */}
-              <div className="bg-gradient-to-br from-gray-900/95 via-black/98 to-gray-900/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-yellow-400/20 overflow-hidden relative">
-                <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-yellow-400/20 via-amber-500/20 to-yellow-400/20 blur-xl opacity-60" />
+              <div className="bg-gradient-to-br from-gray-900/95 via-black/98 to-gray-900/95 backdrop-blur-xl rounded-2xl md:rounded-3xl shadow-2xl border border-yellow-400/20 overflow-hidden relative">
+                <div className="absolute inset-0 rounded-2xl md:rounded-3xl bg-gradient-to-r from-yellow-400/20 via-amber-500/20 to-yellow-400/20 blur-xl opacity-60" />
                 
                 <div className="relative z-10">
-                  <div className="px-6 py-5 bg-gradient-to-r from-yellow-400/10 to-amber-500/10 border-b border-yellow-400/20">
-                    <h3 className="text-xl font-bold text-yellow-400 flex items-center gap-3">
-                      <span className="text-2xl">📋</span>
+                  <div className="px-4 md:px-6 py-4 md:py-5 bg-gradient-to-r from-yellow-400/10 to-amber-500/10 border-b border-yellow-400/20">
+                    <h3 className="text-lg md:text-xl font-bold text-yellow-400 flex items-center gap-2 md:gap-3">
+                      <span className="text-xl md:text-2xl">📋</span>
                       Recent Leave Requests
                     </h3>
                   </div>
-                  <div className="p-6 space-y-3">
+                  <div className="p-4 md:p-6 space-y-2 md:space-y-3">
                     {recentLeaves.length === 0 ? (
-                      <p className="text-gray-400 text-center py-8 text-lg">No leave requests yet</p>
+                      <p className="text-gray-400 text-center py-6 md:py-8 text-base md:text-lg">No leave requests yet</p>
                     ) : (
                       recentLeaves.map((leave) => (
-                        <div key={leave.id || leave._id} className="p-4 bg-gray-800/30 rounded-xl border border-yellow-400/10 hover:bg-yellow-400/5 transition-colors duration-200">
-                          <div className="flex justify-between items-start mb-3">
-                            <div className="font-bold text-white text-lg">
+                        <div key={leave.id || leave._id} className="p-3 md:p-4 bg-gray-800/30 rounded-lg md:rounded-xl border border-yellow-400/10">
+                          <div className="flex justify-between items-start mb-2 md:mb-3">
+                            <div className="font-bold text-white text-sm md:text-lg">
                               {leave.leaveType}
                             </div>
-                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold shadow-lg ${
+                            <span className={`inline-flex items-center px-2 md:px-3 py-1 rounded-full text-xs font-bold shadow-lg ${
                               leave.status === 'approved' 
                                 ? 'bg-gradient-to-r from-green-600 to-green-700 text-white'
                                 : leave.status === 'rejected'
@@ -670,7 +674,7 @@ export default function EmployeeDashboard() {
                               {leave.status === 'approved' ? '✅' : leave.status === 'rejected' ? '❌' : '⏳'} {leave.status.toUpperCase()}
                             </span>
                           </div>
-                          <div className="text-sm text-gray-400 mb-2">
+                          <div className="text-xs md:text-sm text-gray-400 mb-2">
                             {leave.startDate} to {leave.endDate}
                           </div>
                           {leave.status === 'approved' && leave.isPaid !== undefined && (
@@ -691,6 +695,23 @@ export default function EmployeeDashboard() {
                 </div>
               </div>
             </div>
+
+            {/* Auto Checkout Info Banner */}
+            {isLoggedIn && (
+              <div className="bg-gradient-to-r from-blue-900/30 to-blue-800/30 backdrop-blur-xl rounded-xl border border-blue-400/30 p-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-2xl">ℹ️</span>
+                  <div>
+                    <p className="text-blue-300 font-semibold text-sm md:text-base">
+                      Auto Checkout Enabled
+                    </p>
+                    <p className="text-blue-200/70 text-xs md:text-sm">
+                      You will be automatically checked out at 7:00 PM (19:00) if you forget to check out manually.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </EmployeeLayout>

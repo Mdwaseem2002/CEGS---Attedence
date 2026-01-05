@@ -1,5 +1,11 @@
 // src/types/index.ts
 // Complete type definitions with all required fields
+export interface BreakRecord {
+  id: string;
+  startTime: string;
+  endTime?: string;
+  duration?: number; // in minutes
+}
 
 export interface Employee {
   id: string;
@@ -29,6 +35,9 @@ export interface AttendanceRecord {
   status: 'present' | 'absent' | 'late' | 'half-day';
   location: string;
   isLate: boolean;
+  breaks?: BreakRecord[]; // New field for break tracking
+  totalBreakTime?: number; // Total break time in minutes
+  netWorkingHours?: number; // Working hours minus break time
 }
 
 export interface LeaveRequest {

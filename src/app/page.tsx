@@ -177,7 +177,7 @@ export default function HomePage() {
         <div className="container mx-auto px-6 py-6">
           <div className="text-center">
             <p className="text-gray-500 text-sm">
-              © 2025 CEGS - Corporate Enterprise Growth Solutions
+              © 2025 CEGS - Career Expert Global solutions
             </p>
             <p className="text-yellow-400/60 text-xs mt-1">
               Transforming businesses through intelligent workforce management

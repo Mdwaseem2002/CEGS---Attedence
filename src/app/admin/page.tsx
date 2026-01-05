@@ -281,10 +281,12 @@ const loadDashboardData = async () => {
             </div>
           </div>
 
+          
+
           {/* Footer */}
           <div className="mt-8 text-center">
             <p className="text-gray-500 text-sm">
-              © 2025 CEGS - Corporate Enterprise Growth Solutions
+              © 2025 CEGS - Career Expert Global solution
             </p>
             <p className="text-yellow-400/60 text-xs mt-1">
               Administrator Dashboard - Secure Access Portal

@@ -118,7 +118,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
       {/* Footer */}
       <footer className="relative z-10 text-center py-6">
         <p className="text-gray-500 text-sm">
-          © 2025 CEGS - Corporate Enterprise Growth Solutions
+          © 2025 CEGS - Career Expert Global solutions
         </p>
         <p className="text-yellow-400/40 text-xs mt-1">
           Advanced Human Resource Management System
